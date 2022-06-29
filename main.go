@@ -60,6 +60,8 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 
 	cmd := strings.Split(msg.Content, " ")
 
+	log.Printf("cmd %s, %s: %v", msg.ChannelID, msg.Author.Username, cmd)
+
 	switch cmd[0] {
 	case "ping":
 		s.ChannelMessageSend(msg.ChannelID, "Pong!")
