@@ -23,14 +23,14 @@ var counter = 0
 func main() {
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Println("error loading .env file")
 	}
 
 	discordToken := os.Getenv("DISCORD_TOKEN")
 
 	discord, err := discordgo.New("Bot " + discordToken)
 	if err != nil {
-		fmt.Println("error creating Discord session, ", err)
+		log.Println("error creating Discord session, ", err)
 		return
 	}
 
@@ -40,11 +40,11 @@ func main() {
 
 	err = discord.Open()
 	if err != nil {
-		fmt.Println("error opening connection, ", err)
+		log.Println("error opening connection, ", err)
 		return
 	}
 
-	fmt.Println("Bot is now running.  Press CTRL-C to exit.")
+	log.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
@@ -67,14 +67,14 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 		author := msg.Author
 		avatarImg, err := s.UserAvatarDecode(author)
 		if err != nil {
-			fmt.Println("error loading avatar image")
+			log.Println("error loading avatar image")
 			return
 		}
 
 		buf := new(bytes.Buffer)
 		err = png.Encode(buf, avatarImg)
 		if err != nil {
-			fmt.Println("error encoding avatar image")
+			log.Println("error encoding avatar image")
 			return
 		}
 
@@ -95,14 +95,14 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 
 		res, err := http.Get("https://jsonplaceholder.typicode.com/todos")
 		if err != nil {
-			fmt.Println("error getting json")
+			log.Println("error getting json")
 			return
 		}
 		defer res.Body.Close()
 
 		body, err := io.ReadAll(res.Body)
 		if err != nil {
-			fmt.Println("error reading body")
+			log.Println("error reading body")
 			return
 		}
 
@@ -114,13 +114,13 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 		}
 		todo, err := json.MarshalIndent(todos[todoIndex], "", " ")
 		if err != nil {
-			fmt.Println("error marshalling todos")
+			log.Println("error marshalling todos")
 			return
 		}
 
 		_, err = s.ChannelMessageSend(msg.ChannelID, fmt.Sprintf("```json\n%s```", todo))
 		if err != nil {
-			fmt.Printf("error sending message to channel %s: %s\n", msg.ChannelID, err)
+			log.Printf("error sending message to channel %s: %s\n", msg.ChannelID, err)
 		}
 	}
 }
