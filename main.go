@@ -2,10 +2,12 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"strings"
@@ -17,6 +19,8 @@ import (
 
 var discord *discordgo.Session
 var discordToken string
+var googleApiKey string
+var googleSearchCX string
 
 type Todo struct {
 	Completed bool   `json:"completed"`
@@ -31,6 +35,9 @@ func init() {
 		log.Println("error loading .env file")
 	}
 	discordToken = os.Getenv("DISCORD_TOKEN")
+	googleApiKey = os.Getenv("GOOGLE_API_KEY")
+	googleSearchCX = os.Getenv("GOOGLE_SEARCH_CX")
+
 }
 
 func init() {
@@ -70,6 +77,18 @@ var (
 					Name:        "todo-id",
 					Description: "Todo ID",
 					Type:        discordgo.ApplicationCommandOptionInteger,
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "image",
+			Description: "Google Images search",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "query",
+					Description: "Search query",
+					Type:        discordgo.ApplicationCommandOptionString,
 					Required:    true,
 				},
 			},
@@ -128,6 +147,58 @@ var (
 				}
 				content = fmt.Sprintf("**%s**\nstatus: %s", todo.Title, status)
 			}
+
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: content,
+				},
+			})
+		},
+		"image": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			content := "Image not found"
+			query := i.ApplicationCommandData().Options[0].StringValue()
+			url := fmt.Sprintf("https://www.googleapis.com/customsearch/v1?key=%s&cx=%s&searchType=image&safe=active&q=%s", googleApiKey, googleSearchCX, url.QueryEscape(query))
+			log.Println(url)
+
+			res, err := http.Get(url)
+			if err != nil {
+				log.Println("error getting json")
+				return
+			}
+			defer res.Body.Close()
+
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				log.Printf("error reading body: %v", err)
+			}
+
+			var result map[string]interface{}
+			json.Unmarshal(body, &result)
+
+			if imgUrl, err := func() (string, error) {
+				images, ok := result["items"].([]interface{})
+				if !ok {
+					return "", errors.New("error parsing image list")
+				}
+
+				first, ok := images[0].(map[string]interface{})
+				if !ok {
+					return "", errors.New("error parsing first image")
+				}
+
+				link, ok := first["link"].(string)
+				if !ok {
+					return "", errors.New("error parsing link")
+				}
+
+				return link, nil
+			}(); err != nil {
+				log.Printf("error parsing json: %v", err)
+			} else {
+				content = imgUrl
+			}
+			log.Println(content)
 
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
