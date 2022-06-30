@@ -19,38 +19,88 @@ import (
 )
 
 var counter = 0
+var discord *discordgo.Session
+var discordToken string
 
-func main() {
+func init() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Println("error loading .env file")
 	}
+	discordToken = os.Getenv("DISCORD_TOKEN")
+}
 
-	discordToken := os.Getenv("DISCORD_TOKEN")
-
-	discord, err := discordgo.New("Bot " + discordToken)
+func init() {
+	var err error
+	discord, err = discordgo.New("Bot " + discordToken)
 	if err != nil {
-		log.Println("error creating Discord session, ", err)
-		return
+		log.Fatalf("Invalid bot parameters: %v", err)
+	}
+}
+
+func init() {
+	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
+		}
+	})
+}
+
+var (
+	commands = []*discordgo.ApplicationCommand{
+		{
+			Name: "basic-command",
+			// All commands and options must have a description
+			// Commands/options without description will fail the registration
+			// of the command.
+			Description: "Basic command",
+		},
 	}
 
+	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
+		"basic-command": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: "Hey there! Congratulations, you just executed your first slash command",
+				},
+			})
+		},
+	}
+)
+
+func init() {
+	discord.AddHandler(func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+		if h, ok := commandHandlers[i.ApplicationCommandData().Name]; ok {
+			h(s, i)
+		}
+	})
+}
+
+func main() {
 	discord.AddHandler(messageCreate)
 
-	discord.Identify.Intents = discordgo.IntentGuildMessages
-
-	err = discord.Open()
+	err := discord.Open()
 	if err != nil {
 		log.Println("error opening connection, ", err)
 		return
 	}
 
+	registeredCommands := make([]*discordgo.ApplicationCommand, len(commands))
+	for i, v := range commands {
+		cmd, err := discord.ApplicationCommandCreate(discord.State.User.ID, "", v)
+		if err != nil {
+			log.Panicf("Cannot create '%v' command: %v", v.Name, err)
+		}
+		registeredCommands[i] = cmd
+	}
+
+	defer discord.Close()
+
 	log.Println("Bot is now running.  Press CTRL-C to exit.")
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc, syscall.SIGINT, syscall.SIGTERM, os.Interrupt)
 	<-sc
-
-	// Cleanly close down the Discord session.
-	discord.Close()
 }
 
 func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
