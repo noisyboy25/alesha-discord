@@ -8,7 +8,6 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
-	"strconv"
 	"strings"
 	"syscall"
 
@@ -19,6 +18,13 @@ import (
 var counter = 0
 var discord *discordgo.Session
 var discordToken string
+
+type Todo struct {
+	Completed bool   `json:"completed"`
+	ID        int    `json:"id"`
+	Title     string `json:"title"`
+	UserID    int    `json:"userId"`
+}
 
 func init() {
 	err := godotenv.Load()
@@ -57,6 +63,18 @@ var (
 			Name:        "avatar",
 			Description: "Show your avatar",
 		},
+		{
+			Name:        "todo",
+			Description: "Get one todo",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Name:        "todo-id",
+					Description: "Todo ID",
+					Type:        discordgo.ApplicationCommandOptionInteger,
+					Required:    true,
+				},
+			},
+		},
 	}
 
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
@@ -75,6 +93,43 @@ var (
 			} else if i.Interaction.User != nil {
 				content = i.Interaction.User.AvatarURL("2048")
 			}
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: content,
+				},
+			})
+		},
+		"todo": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			content := ""
+			url := fmt.Sprintf("https://jsonplaceholder.typicode.com/todos/%d", i.ApplicationCommandData().Options[0].IntValue())
+
+			res, err := http.Get(url)
+			if err != nil {
+				log.Println("error getting json")
+				return
+			}
+			defer res.Body.Close()
+
+			body, err := io.ReadAll(res.Body)
+			if err != nil {
+				log.Println("error reading body")
+			}
+
+			var todo Todo
+			err = json.Unmarshal(body, &todo)
+			if err != nil {
+				log.Println("error unmarshalling json")
+			} else {
+				status := ""
+				if todo.Completed {
+					status = "Completed"
+				} else {
+					status = "InProgress"
+				}
+				content = fmt.Sprintf("**%s**\nstatus: %s", todo.Title, status)
+			}
+
 			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
@@ -135,42 +190,5 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 	case "c":
 		s.UpdateGameStatus(0, fmt.Sprint(counter))
 		counter++
-
-	case "todo":
-		var todoIndex uint64
-		if len(cmd) > 1 {
-			todoIndex, _ = strconv.ParseUint(cmd[1], 10, 64)
-		}
-
-		res, err := http.Get("https://jsonplaceholder.typicode.com/todos")
-		if err != nil {
-			log.Println("error getting json")
-			return
-		}
-		defer res.Body.Close()
-
-		body, err := io.ReadAll(res.Body)
-		if err != nil {
-			log.Println("error reading body")
-			return
-		}
-
-		var todos []interface{}
-		json.Unmarshal(body, &todos)
-
-		if uint64(len(todos)) < todoIndex {
-			return
-		}
-
-		todo, err := json.MarshalIndent(todos[todoIndex], "", " ")
-		if err != nil {
-			log.Println("error marshalling todos")
-			return
-		}
-
-		_, err = s.ChannelMessageSend(msg.ChannelID, fmt.Sprintf("```json\n%s```", todo))
-		if err != nil {
-			log.Printf("error sending message to channel %s: %s\n", msg.ChannelID, err)
-		}
 	}
 }
