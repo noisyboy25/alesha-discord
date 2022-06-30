@@ -15,7 +15,6 @@ import (
 	"github.com/joho/godotenv"
 )
 
-var counter = 0
 var discord *discordgo.Session
 var discordToken string
 
@@ -186,9 +185,5 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 	switch cmd[0] {
 	case "ping":
 		s.ChannelMessageSend(msg.ChannelID, "Pong!")
-
-	case "c":
-		s.UpdateGameStatus(0, fmt.Sprint(counter))
-		counter++
 	}
 }
