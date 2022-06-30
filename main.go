@@ -1,10 +1,8 @@
 package main
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"image/png"
 	"io"
 	"log"
 	"net/http"
@@ -55,6 +53,10 @@ var (
 			// of the command.
 			Description: "Basic command",
 		},
+		{
+			Name:        "avatar",
+			Description: "Show your avatar",
+		},
 	}
 
 	commandHandlers = map[string]func(s *discordgo.Session, i *discordgo.InteractionCreate){
@@ -63,6 +65,20 @@ var (
 				Type: discordgo.InteractionResponseChannelMessageWithSource,
 				Data: &discordgo.InteractionResponseData{
 					Content: "Hey there! Congratulations, you just executed your first slash command",
+				},
+			})
+		},
+		"avatar": func(s *discordgo.Session, i *discordgo.InteractionCreate) {
+			content := ""
+			if i.Interaction.Member != nil {
+				content = i.Interaction.Member.AvatarURL("2048")
+			} else if i.Interaction.User != nil {
+				content = i.Interaction.User.AvatarURL("2048")
+			}
+			s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+				Type: discordgo.InteractionResponseChannelMessageWithSource,
+				Data: &discordgo.InteractionResponseData{
+					Content: content,
 				},
 			})
 		},
@@ -115,30 +131,11 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 	switch cmd[0] {
 	case "ping":
 		s.ChannelMessageSend(msg.ChannelID, "Pong!")
-	case "avatar":
-		author := msg.Author
-		avatarImg, err := s.UserAvatarDecode(author)
-		if err != nil {
-			log.Println("error loading avatar image")
-			return
-		}
-
-		buf := new(bytes.Buffer)
-		err = png.Encode(buf, avatarImg)
-		if err != nil {
-			log.Println("error encoding avatar image")
-			return
-		}
-
-		file := &discordgo.File{Name: "avatar.png", ContentType: "image/png", Reader: buf}
-		s.ChannelMessageSendComplex(msg.ChannelID, &discordgo.MessageSend{Files: []*discordgo.File{file}})
-	case "avatarUrl":
-		avatarUrl := msg.Author.AvatarURL("2048")
-		s.ChannelMessageSend(msg.ChannelID, avatarUrl)
 
 	case "c":
 		s.UpdateGameStatus(0, fmt.Sprint(counter))
 		counter++
+
 	case "todo":
 		var todoIndex uint64
 		if len(cmd) > 1 {
@@ -164,6 +161,7 @@ func messageCreate(s *discordgo.Session, msg *discordgo.MessageCreate) {
 		if uint64(len(todos)) < todoIndex {
 			return
 		}
+
 		todo, err := json.MarshalIndent(todos[todoIndex], "", " ")
 		if err != nil {
 			log.Println("error marshalling todos")
